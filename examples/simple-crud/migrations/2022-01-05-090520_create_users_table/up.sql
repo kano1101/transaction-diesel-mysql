@@ -1,0 +1,6 @@
+-- Your SQL goes here
+CREATE TABLE users
+(
+  id INTEGER AUTO_INCREMENT PRIMARY KEY NOT NULL,
+  name VARCHAR(128) NOT NULL
+);
