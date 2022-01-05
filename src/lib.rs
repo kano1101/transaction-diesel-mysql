@@ -1,1 +1,78 @@
+//! A transaction runner for diesel
 
+extern crate diesel;
+extern crate transaction;
+use diesel::prelude::*;
+use diesel::MysqlConnection;
+use std::marker::PhantomData;
+use transaction::*;
+
+/// run the given function insed a transaction using the given connection.
+pub fn run<'a, T, E, Tx>(cn: &'a MysqlConnection, tx: Tx) -> Result<T, E>
+where
+    E: From<diesel::result::Error>,
+    Tx: Transaction<Ctx = DieselContext<'a, MysqlConnection>, Item = T, Err = E>,
+{
+    (*cn).transaction(|| tx.run(&mut DieselContext::new(cn)))
+}
+
+/// run the given function insed a transaction using the given connection but do not commit it.
+/// Panics if the given function returns an Err.
+/// This is usefull for testing
+pub fn test_run<'a, T, E, Tx>(cn: &'a MysqlConnection, tx: Tx) -> T
+where
+    E: From<diesel::result::Error> + std::fmt::Debug,
+    Tx: Transaction<Ctx = DieselContext<'a, MysqlConnection>, Item = T, Err = E>,
+{
+    (*cn).test_transaction(|| tx.run(&mut DieselContext::new(cn)))
+}
+
+/// diesel transaction object.
+pub struct DieselContext<'a, Cn: 'a> {
+    conn: &'a Cn,
+    _phantom: PhantomData<()>,
+}
+
+impl<'a, Cn> DieselContext<'a, Cn> {
+    // never pub this function
+    fn new(conn: &'a Cn) -> Self {
+        DieselContext {
+            conn: conn,
+            _phantom: PhantomData,
+        }
+    }
+
+    fn conn(&self) -> &'a Cn {
+        &self.conn
+    }
+}
+
+/// Receive the connection from the executing transaction and perform computation.
+pub fn with_conn<'a, Conn, F, T, E>(f: F) -> WithConn<'a, Conn, F>
+where
+    F: Fn(&'a Conn) -> Result<T, E>,
+{
+    WithConn {
+        f: f,
+        _phantom: PhantomData,
+    }
+}
+
+/// The result of `with_conn`
+#[derive(Debug)]
+pub struct WithConn<'a, Conn: 'a, F> {
+    f: F,
+    _phantom: PhantomData<&'a Conn>,
+}
+
+impl<'a, Conn, T, E, F> Transaction for WithConn<'a, Conn, F>
+where
+    F: Fn(&'a Conn) -> Result<T, E>,
+{
+    type Ctx = DieselContext<'a, Conn>;
+    type Item = T;
+    type Err = E;
+    fn run(&self, ctx: &mut DieselContext<'a, Conn>) -> Result<Self::Item, Self::Err> {
+        (self.f)(ctx.conn())
+    }
+}
