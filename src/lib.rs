@@ -13,7 +13,8 @@ where
     E: From<diesel::result::Error>,
     Tx: Transaction<Ctx = DieselContext<'a, MysqlConnection>, Item = T, Err = E>,
 {
-    (*cn).transaction(|| tx.run(&mut DieselContext::new(cn)))
+    cn.clone()
+        .transaction(|| tx.run(&mut DieselContext::new(cn)))
 }
 
 /// run the given function insed a transaction using the given connection but do not commit it.
@@ -24,7 +25,8 @@ where
     E: From<diesel::result::Error> + std::fmt::Debug,
     Tx: Transaction<Ctx = DieselContext<'a, MysqlConnection>, Item = T, Err = E>,
 {
-    (*cn).test_transaction(|| tx.run(&mut DieselContext::new(cn)))
+    cn.clone()
+        .test_transaction(|| tx.run(&mut DieselContext::new(cn)))
 }
 
 /// diesel transaction object.
